@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include "util.h"
 #include "errormsg.h"
+#define DEBUG
 
-int yylex(void); /* function prototype */
+int yylex(void);
 
 void yyerror(char *s)
 {
@@ -11,33 +12,236 @@ void yyerror(char *s)
 }
 %}
 
-
 %union {
-	int pos;
-	int ival;
-	string sval;
-	}
+ int pos;
+ int ival;
+ string sval;
+}
 
 %token <sval> ID STRING
 %token <ival> INT
 
-%token 
-  COMMA COLON SEMICOLON LPAREN RPAREN LBRACK RBRACK 
-  LBRACE RBRACE DOT 
-  PLUS MINUS TIMES DIVIDE EQ NEQ LT LE GT GE
-  AND OR ASSIGN
-  ARRAY IF THEN ELSE WHILE FOR TO DO LET IN END OF 
-  BREAK NIL
-  FUNCTION VAR TYPE 
+%token
+ COMMA COLON SEMICOLON LPAREN RPAREN LBRACK RBRACK
+ LBRACE RBRACE DOT
+ PLUS MINUS TIMES DIVIDE EQ NEQ LT LE GT GE
+ AND OR ASSIGN
+ ARRAY IF THEN ELSE WHILE FOR TO DO LET IN END OF
+ BREAK NIL
+ FUNCTION VAR TYPE
+
+%nonassoc ORLOW
+%left OR
+%nonassoc ANDLOW
+%left AND
+%nonassoc RELOW
+%nonassoc EQ NEQ LT LE GT GE
+%nonassoc ADDLOW
+%left PLUS MINUS
+%nonassoc MULLOW
+%left TIMES DIVIDE
+%nonassoc IFX
+%nonassoc ELSE
 
 %start program
-
+%debug
 %%
 
-program:	exp
+program: exp
 
-exp:   ID
+exp: assignexp
 
+assignexp:
+ lvalue ASSIGN assignexp
+ | orexp
+ ;
 
+orexp:
+ andexp ortail
+ ;
 
-	
+ortail:
+ /* empty */ %prec ORLOW
+ | OR andexp ortail
+ ;
+
+andexp:
+ relexp andtail
+ ;
+
+andtail:
+ /* empty */ %prec ANDLOW
+ | AND relexp andtail
+ ;
+
+relexp:
+ addexp reltail
+ ;
+
+reltail:
+ /* empty */ %prec RELOW
+ | relop addexp
+ ;
+
+relop:
+ EQ
+ | NEQ
+ | LT
+ | LE
+ | GT
+ | GE
+ ;
+
+addexp:
+ mulexp addtail
+ ;
+
+addtail:
+ /* empty */ %prec ADDLOW
+ | PLUS mulexp addtail
+ | MINUS mulexp addtail
+ ;
+
+mulexp:
+ unaryexp multail
+ ;
+
+multail:
+ /* empty */ %prec MULLOW
+ | TIMES unaryexp multail
+ | DIVIDE unaryexp multail
+ ;
+
+unaryexp:
+ MINUS unaryexp
+ | atomexp
+ ;
+
+atomexp:
+ NIL
+ | INT
+ | STRING
+ | BREAK
+ | LPAREN explist_opt RPAREN
+ | idexp
+ | IF exp THEN exp %prec IFX
+ | IF exp THEN exp ELSE exp
+ | WHILE exp DO exp
+ | FOR ID ASSIGN exp TO exp DO exp
+ | LET decs_opt IN explist_opt END
+ ;
+
+idexp:
+ ID idsuffix
+ ;
+
+lvalue:
+ ID lvaluetail
+ ;
+
+idsuffix:
+ /* empty */
+ | LPAREN args_opt RPAREN
+ | LBRACE recfields_opt RBRACE
+ | lvstart
+ ;
+
+lvstart:
+ DOT ID lvaluetail
+ | LBRACK exp RBRACK subsuffix
+ ;
+
+subsuffix:
+ OF exp
+ | lvaluetail
+ ;
+
+lvaluetail:
+ /* empty */
+ | DOT ID lvaluetail
+ | LBRACK exp RBRACK lvaluetail
+ ;
+
+explist_opt:
+ /* empty */
+ | explist
+ ;
+
+explist:
+ exp
+ | explist SEMICOLON exp
+ ;
+
+args_opt:
+ /* empty */
+ | args
+ ;
+
+args:
+ exp
+ | args COMMA exp
+ ;
+
+recfields_opt:
+ /* empty */
+ | recfields
+ ;
+
+recfields:
+ recfield
+ | recfields COMMA recfield
+ ;
+
+recfield:
+ ID EQ exp
+ ;
+
+decs_opt:
+ /* empty */
+ | decs
+ ;
+
+decs:
+ dec
+ | decs dec
+ ;
+
+dec:
+ typedec
+ | vardec
+ | fundec
+ ;
+
+typedec:
+ TYPE ID EQ ty
+ ;
+
+vardec:
+ VAR ID ASSIGN exp
+ | VAR ID COLON ID ASSIGN exp
+ ;
+
+fundec:
+ FUNCTION ID LPAREN tyfields_opt RPAREN EQ exp
+ | FUNCTION ID LPAREN tyfields_opt RPAREN COLON ID EQ exp
+ ;
+
+ty:
+ ID
+ | LBRACE tyfields_opt RBRACE
+ | ARRAY OF ID
+ ;
+
+tyfields_opt:
+ /* empty */
+ | tyfields
+ ;
+
+tyfields:
+ tyfield
+ | tyfields COMMA tyfield
+ ;
+
+tyfield:
+ ID COLON ID
+ ;
